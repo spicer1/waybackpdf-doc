@@ -4,7 +4,7 @@
 
 Small python tool used to recover and download archived PDF files for a given domain name. It uses the "Wayback Machine" from archive.org.
 This tool is based on this <a href="https://github.com/Haax9/WaybackPDF/" target="_blank" rel="noopener">
-https://github.com/Haax9/WaybackPDF</a> that was based on <a href="https://openfacto.fr/2020/04/19/recuperer-des-fichiers-pdf-en-masse-sur-archive-org/" target="_blank" rel="noopener">OpenFacto research</a> and heavily inspired by <a href="https://twitter.com/yannguegan" target="_blank" rel="noopener">@yannguegan's</a> work. His first uploaded script is not reacheable anymore and was lacking some verifications on the gathered files, causing errors. These are the two reasons I recoded the tool and uploaded it.
+https://github.com/Haax9/WaybackPDF</a> that was <em>"based on <a href="https://openfacto.fr/2020/04/19/recuperer-des-fichiers-pdf-en-masse-sur-archive-org/" target="_blank" rel="noopener">OpenFacto research</a> and heavily inspired by <a href="https://twitter.com/yannguegan" target="_blank" rel="noopener">@yannguegan's</a> work. His first uploaded script is not reacheable anymore and was lacking some verifications on the gathered files, causing errors. These are the two reasons I recoded the tool and uploaded it"</em>.
 
 
 ## :memo: Prerequisite & Install
