@@ -50,6 +50,8 @@ def parse_arguments():
                         help='Download all files regardless of extension/type')
     parser.add_argument('--include-html', action='store_true', required=False,
                         help='Include HTML/PHP/ASP pages in download (only works with --get-all or specific extensions)')
+    parser.add_argument('--YYYYMMDD', action='store_true', required=False,
+                        help='Short Timestamp YYYYMMDD instead default YYYYMMDDHHMMSS in filenames')
 
     args = parser.parse_args()
     return args
@@ -74,11 +76,13 @@ def get_extension_from_url(url):
     return 'no_extension'
 
 
-def format_timestamp_for_filename(timestamp):
+def format_timestamp_for_filename(timestamp, long_timestamp):
     """Convert archive.org timestamp (YYYYMMDDHHMMSS) to YYYYMMDD format"""
-    if len(timestamp) >= 8:
-        return timestamp[:8]  # Returns YYYYMMDD
-    return timestamp
+    if long_timestamp:
+        return timestamp
+    else
+        if len(timestamp) >= 8:
+            return timestamp[:8]  # Returns YYYYMMDD
 
 
 def getFileList(domain, protocol, filetypes, outputDir, get_all=False, include_html=False):
@@ -252,7 +256,7 @@ def filter_files(files, filetypes, get_all=False, include_html=False):
     return selected_files
 
 
-def process_files(selected_files, filetype_list, include_html):
+def process_files(selected_files, filetype_list, include_html, long_timestamp):
     """Add wayback URL and filename to selected files"""
     
     processed_files = []
@@ -316,9 +320,9 @@ def process_files(selected_files, filetype_list, include_html):
         if not base_name:
             base_name = 'file'
         
-        # Create filename with timestamp PREFIX (YYYYMMDD_filename)
-        # Format timestamp to YYYYMMDD
-        date_prefix = format_timestamp_for_filename(file['timestamp'])
+        # Create filename with timestamp PREFIX (YYYYMMDDHHMMSS_filename) or (YYYYMMDD_filename)
+        # Format timestamp to YYYYMMDDHHMMSS or YYYYMMDD
+        date_prefix = format_timestamp_for_filename(file['timestamp'],long_timestamp)
         file['name'] = date_prefix + '_' + base_name
         file['extension'] = extension
         
@@ -557,7 +561,7 @@ def main():
         selected_files = filter_files(all_files, args.filetypes, args.get_all, args.include_html)
         
         # Process files (add wayback URL and filename)
-        processed_files = process_files(selected_files, filetype_list, args.include_html)
+        processed_files = process_files(selected_files, filetype_list, args.include_html, args.YYYYMMDD)
         
         print(PC.note_box + "Files matching criteria: {}".format(len(processed_files)))
         
