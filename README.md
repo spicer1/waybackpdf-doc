@@ -51,6 +51,7 @@ options:
   --get-file-ext        Generate list of all file extensions found without downloading
   --get-all             Download all files regardless of extension/type
   --include-html        Include HTML/PHP/ASP pages in download (only works with --get-all or specific extensions)
+  --YYYYMMDD            Short Timestamp YYYYMMDD instead default YYYYMMDDHHMMSS in filenames
 
 ```
 
