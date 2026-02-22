@@ -1,4 +1,4 @@
-# WaybackPDF
+# WaybackRetrive PDF & other (doc and not only) files
 
 ## :speech_balloon: Description
 
@@ -96,9 +96,9 @@ text
 ```bash
 
 python3 waybackpdf-doc.py -d old.unipi.it -t pdf
-
-This will download all PDFs found in the archive to the old.unipi.it/ directory
 ```
+This will download all PDFs found in the archive to the old.unipi.it/ directory
+
 
 ### 3. Download documents (PDF, DOC, DOCX, ODT) to default directory
 ```bash
@@ -178,39 +178,13 @@ python3 waybackpdf-doc.py -d old.unipi.it -t pdf
 
 # :bookmark: Important Notes
 
-    The script automatically saves a filelist.raw.json file in the output directory with all metadata
+The script automatically saves a filelist.raw.json file in the output directory with all metadata
 
-    Files are renamed with date prefix (YYYYMMDD_filename.ext)
+Files are renamed with date prefix (YYYYMMDD_filename.ext)
 
-    In case of conflicts, progressive suffixes are added (+1, +2, etc.)
+In case of conflicts, progressive suffixes are added (+1, +2, etc.)
 
-    There's a 12-second pause between downloads to avoid rate limiting
+There's a 12-second pause between downloads to avoid rate limiting
 
-    Maximum 3 attempts per downloaded file
+Maximum 3 attempts per downloaded file
 
-Example output during download:
-text
-
-[+] Web Archive File Downloader
-[+] Target domain : old.unipi.it
-[+] File types : pdf,doc
-[+] Output directory : old.unipi.it/
-
-[*] Requesting files list...
-[+] Fetching data from archive.org...
-[+] Raw JSON saved in: old.unipi.it/filelist.raw.json
-[+] Total entries found: 5842
-[+] Files sorted chronologically (oldest first)
-
-[*] Downloading Files...
-[+] Found 0 existing files in the output directory.
-[+] Downloading 156 files...
-
-[+] (1/156) Saved 20050328_annual-report.pdf
-12 seconds pause before next download...
-[+] (2/156) Saved 20050615_presentation.pdf
-...
-[*] Everything's done !
-[*] Happy analysis !
-
-These examples cover most common use cases of the script!
