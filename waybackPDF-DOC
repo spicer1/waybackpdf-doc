@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+# coding: utf-8
+
+import json
+import os
+import re
+import requests
+import argparse
+import time
+from collections import Counter
+from pathlib import Path
+
+class PC:
+    """PC (Print Color)
+    Used to generate some colorful, relevant, nicely formatted status messages.
+    """
+    green = '\033[92m'
+    blue = '\033[94m'
+    orange = '\033[93m'
+    endc = '\033[0m'
+    ok_box = blue + '[*] ' + endc
+    note_box = green + '[+] ' + endc
+    warn_box = orange + '[!] ' + endc
+
+
+def parse_arguments():
+    desc = ('OSINT tool to download archived files from archive.org for'
+            ' a given website.')
+    parser = argparse.ArgumentParser(description=desc)
+
+    parser.add_argument('-d', '--domain', type=str, action='store',
+                        required=True,
+                        help='The target domain you are looking for files')
+    parser.add_argument('-o', '--output', type=str, action='store',
+                        required=False,
+                        help='Optional output directory (Default is the domain name)')
+    parser.add_argument('--http', type=str, action='store',
+                        required=False,
+                        help='Use HTTP instead of HTTPS for the target domain.'
+                        ' The default behavior uses HTTPS')
+    parser.add_argument('-r', '--resume', type=int, action='store', required=False,
+                        help='Start downloading at a given index and skip X previous'
+                        ' files')
+    parser.add_argument('-t', '--filetypes', type=str, action='store', required=False,
+                        default='pdf,doc,docx,odt',
+                        help='Comma-separated list of file types to download (default: pdf,doc,docx,odt)')
+    parser.add_argument('--get-file-ext', action='store_true', required=False,
+                        help='Generate list of all file extensions found without downloading')
+    parser.add_argument('--get-all', action='store_true', required=False,
+                        help='Download all files regardless of extension/type')
+    parser.add_argument('--include-html', action='store_true', required=False,
+                        help='Include HTML/PHP/ASP pages in download (only works with --get-all or specific extensions)')
+
+    args = parser.parse_args()
+    return args
+
+
+def get_extension_from_url(url):
+    """Extract file extension from URL, handling query strings and special cases"""
+    # Get the last part of the path
+    filename = url.rsplit('/', 1)[1] if '/' in url else url
+    
+    # Remove query string if present
+    if '?' in filename:
+        filename = filename.split('?')[0]
+    
+    # Check if there's an extension (dot not at the beginning)
+    if '.' in filename and not filename.startswith('.'):
+        ext = filename.rsplit('.', 1)[1].lower()
+        # Handle common web page extensions
+        if ext in ['html', 'htm', 'php', 'asp', 'aspx', 'jsp', 'cgi', 'pl', 'py']:
+            return 'webpage'
+        return ext
+    return 'no_extension'
+
+
+def format_timestamp_for_filename(timestamp):
+    """Convert archive.org timestamp (YYYYMMDDHHMMSS) to YYYYMMDD format"""
+    if len(timestamp) >= 8:
+        return timestamp[:8]  # Returns YYYYMMDD
+    return timestamp
+
+
+def getFileList(domain, protocol, filetypes, outputDir, get_all=False, include_html=False):
+    print("\n" + PC.ok_box + "Requesting files list...")
+
+    # Default target is HTTPS
+    targetDomain = "https://{}".format(domain)
+
+    # Building URL
+    if protocol:
+        targetDomain = "http://{}".format(domain)
+
+    baseURL = "https://web.archive.org/web/timemap/"
+    payload = {'url':targetDomain, 'matchType':'prefix','collapse':'urlkey',
+               'output':'json', 'fl':'original,mimetype,timestamp,endtimestamp'
+               ',groupcount,uniqcount', 'filter':'!statuscode:[45]..'
+               ,'limit':'100000', '_':'1587473968806'}
+
+    # HTTP request to get files list
+    print(PC.note_box + "Fetching data from archive.org...")
+    raw = requests.get(baseURL, params=payload).json()
+
+    # Assicurati che la directory di output esista
+    if not os.path.exists(outputDir):
+        os.makedirs(outputDir, exist_ok=True)
+
+    # Salva il raw JSON nella directory di output
+    raw_filename = os.path.join(outputDir, "filelist.raw.json")
+    with open(raw_filename, 'w', encoding='utf-8') as f:
+        json.dump(raw, f, indent=2, ensure_ascii=False)
+    print(PC.note_box + f"Raw JSON salvato in: {raw_filename}")    
+
+    # Building the files list
+    files = []
+    headers = raw[0]
+    
+    for item in raw[1:]:
+        file = {}
+        for i, header in enumerate(headers):
+            file[headers[i]] = item[i]
+        files.append(file)
+    
+    print(PC.note_box + "Total entries found: {}".format(len(files)))
+    
+    # Sort files by timestamp (chronological order)
+    files.sort(key=lambda x: x['timestamp'])
+    print(PC.note_box + "Files sorted chronologically (oldest first)")
+    
+    return files
+
+
+def analyze_file_extensions(files):
+    """Analyze and display all file extensions found"""
+    print("\n" + PC.ok_box + "Analyzing file extensions...")
+    
+    extensions = []
+    mime_types = []
+    
+    for file in files:
+        # Get extension from URL
+        ext = get_extension_from_url(file['original'])
+        extensions.append(ext)
+        
+        # Track mime type
+        mime_types.append(file['mimetype'])
+    
+    # Count extensions
+    ext_counter = Counter(extensions)
+    mime_counter = Counter(mime_types)
+    
+    print("\n" + PC.note_box + "FILE EXTENSIONS FOUND:")
+    print("-" * 50)
+    for ext, count in sorted(ext_counter.items(), key=lambda x: x[1], reverse=True):
+        percentage = (count / len(files)) * 100
+        print("  {:<15} {:>6} files ({:.1f}%)".format(ext + ':', count, percentage))
+    
+    print("\n" + PC.note_box + "MIME TYPES FOUND:")
+    print("-" * 50)
+    for mime, count in sorted(mime_counter.items(), key=lambda x: x[1], reverse=True)[:20]:  # Show top 20
+        percentage = (count / len(files)) * 100
+        print("  {:<40} {:>6} files ({:.1f}%)".format(mime + ':', count, percentage))
+    
+    if len(mime_counter) > 20:
+        print("  ... and {} more mime types".format(len(mime_counter) - 20))
+    
+    print("\n" + PC.note_box + "Total unique extensions: {}".format(len(ext_counter)))
+    print(PC.note_box + "Total unique mime types: {}".format(len(mime_counter)))
+
+
+def filter_files(files, filetypes, get_all=False, include_html=False):
+    """Filter files based on criteria"""
+    
+    # Parse file types
+    filetype_list = [ft.strip().lower() for ft in filetypes.split(',')]
+    
+    # Map file extensions to MIME types for document types
+    mime_map = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'odt': 'application/vnd.oasis.opendocument.text',
+        'html': 'text/html',
+        'htm': 'text/html',
+        'php': ['application/x-httpd-php', 'text/html', 'application/php'],
+        'asp': ['text/asp', 'application/x-asap'],
+        'aspx': 'application/aspx',
+        'txt': 'text/plain',
+        'xml': ['application/xml', 'text/xml'],
+        'json': 'application/json',
+        'css': 'text/css',
+        'js': ['application/javascript', 'text/javascript'],
+        'jpg': ['image/jpeg', 'image/jpg'],
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'svg': 'image/svg+xml',
+        'zip': 'application/zip',
+        'tar': 'application/x-tar',
+        'gz': 'application/gzip',
+        'mp3': 'audio/mpeg',
+        'mp4': 'video/mp4',
+    }
+    
+    # Build list of accepted mime types
+    accepted_mimes = set()
+    
+    if get_all:
+        # Accept everything
+        print(PC.note_box + "Downloading ALL files regardless of type")
+        return files
+    
+    # Add document types
+    for ft in filetype_list:
+        if ft in mime_map:
+            mime_value = mime_map[ft]
+            if isinstance(mime_value, list):
+                accepted_mimes.update(mime_value)
+            else:
+                accepted_mimes.add(mime_value)
+        else:
+            print(PC.warn_box + "Unknown file type: {}. Using extension-based matching.".format(ft))
+            # We'll handle these via extension check later
+    
+    # Add web pages if requested
+    if include_html:
+        html_mimes = ['text/html', 'application/x-httpd-php', 'application/php', 
+                      'text/asp', 'application/aspx', 'application/x-asap']
+        accepted_mimes.update(html_mimes)
+        filetype_list.extend(['html', 'htm', 'php', 'asp', 'aspx'])
+    
+    if not accepted_mimes and not get_all:
+        print(PC.warn_box + "No valid mime types specified. Using default: pdf")
+        accepted_mimes.add('application/pdf')
+        filetype_list = ['pdf']
+    
+    # Filter files
+    selected_files = []
+    
+    for file in files:
+        # Check by mime type first
+        if file['mimetype'] in accepted_mimes:
+            selected_files.append(file)
+            continue
+        
+        # If mime type not matched but we have extension-based types, check URL extension
+        if filetype_list:
+            ext = get_extension_from_url(file['original'])
+            if ext in filetype_list or (include_html and ext == 'webpage'):
+                selected_files.append(file)
+    
+    return selected_files
+
+
+def process_files(selected_files, filetype_list, include_html):
+    """Add wayback URL and filename to selected files"""
+    
+    processed_files = []
+    
+    for file in selected_files:
+        # Create direct URL for each file
+        file['wayback'] = 'https://web.archive.org/web/' + file['timestamp'] + 'if_/' + file['original']
+        
+        # Extract original filename from URL
+        original_name = file['original'].rsplit('/', 1)[1]
+        
+        # Handle query strings in filename
+        if '?' in original_name:
+            original_name = original_name.split('?')[0]
+        
+        # Determine file extension from mimetype or URL
+        mimetype = file['mimetype']
+        extension = ''
+        
+        # Map mime type to extension
+        if mimetype == 'application/pdf':
+            extension = '.pdf'
+        elif mimetype == 'application/msword':
+            extension = '.doc'
+        elif mimetype == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            extension = '.docx'
+        elif mimetype == 'application/vnd.oasis.opendocument.text':
+            extension = '.odt'
+        elif mimetype == 'text/html' or 'php' in mimetype or 'asp' in mimetype:
+            # For web pages, try to preserve original extension or use .html
+            url_ext = get_extension_from_url(file['original'])
+            if url_ext != 'no_extension' and url_ext != 'webpage':
+                extension = '.' + url_ext
+            else:
+                extension = '.html'
+        elif mimetype.startswith('text/'):
+            extension = '.txt'
+        elif mimetype.startswith('image/'):
+            # Try to get extension from URL or use jpg as default
+            url_ext = get_extension_from_url(file['original'])
+            if url_ext != 'no_extension' and url_ext in ['jpg', 'jpeg', 'png', 'gif', 'svg']:
+                extension = '.' + url_ext
+            else:
+                extension = '.bin'  # Binary fallback
+        else:
+            # For other types, try to use URL extension
+            url_ext = get_extension_from_url(file['original'])
+            if url_ext != 'no_extension':
+                extension = '.' + url_ext
+            else:
+                extension = '.bin'
+        
+        # Clean the base name
+        if original_name.lower().endswith(extension.lower()):
+            base_name = original_name[:-len(extension)]
+        else:
+            base_name = original_name
+        
+        # Remove any path traversal or special characters
+        base_name = re.sub(r'[^\w\s-]', '', base_name)
+        if not base_name:
+            base_name = 'file'
+        
+        # Create filename with timestamp PREFIX (YYYYMMDD_filename)
+        # Format timestamp to YYYYMMDD
+        date_prefix = format_timestamp_for_filename(file['timestamp'])
+        file['name'] = date_prefix + '_' + base_name
+        file['extension'] = extension
+        
+        processed_files.append(file)
+    
+    return processed_files
+
+
+def get_existing_files_map(output_dir):
+    """
+    Crea una mappa dei file già presenti nella directory di output.
+    Restituisce un dizionario che mappa il nome base (senza suffisso +N) 
+    alla lista dei file esistenti con quel nome base.
+    """
+    existing_files_map = {}
+    
+    if not os.path.exists(output_dir):
+        return existing_files_map
+    
+    for filename in os.listdir(output_dir):
+        filepath = os.path.join(output_dir, filename)
+        if os.path.isfile(filepath):
+            # Separa nome base ed estensione
+            name_parts = filename.rsplit('.', 1)
+            if len(name_parts) == 2:
+                base_name, ext = name_parts
+                full_base = base_name + '.' + ext
+            else:
+                base_name = filename
+                ext = ''
+                full_base = filename
+            
+            # Rimuovi eventuali suffissi +N dal nome base
+            clean_name = re.sub(r'\+[0-9]+$', '', base_name)
+            
+            # Memorizza nella mappa
+            if clean_name not in existing_files_map:
+                existing_files_map[clean_name] = []
+            
+            # Estrai il numero del suffisso se presente
+            suffix_match = re.search(r'\+([0-9]+)$', base_name)
+            if suffix_match:
+                suffix_num = int(suffix_match.group(1))
+                existing_files_map[clean_name].append({
+                    'full_name': filename,
+                    'base_name': base_name,
+                    'suffix': suffix_num,
+                    'extension': ext
+                })
+            else:
+                # File senza suffisso
+                existing_files_map[clean_name].append({
+                    'full_name': filename,
+                    'base_name': base_name,
+                    'suffix': 0,  # 0 indica nessun suffisso
+                    'extension': ext
+                })
+    
+    return existing_files_map
+
+
+def generate_unique_filename(base_name, extension, existing_files_map):
+    """
+    Genera un nome file unico aggiungendo un suffisso progressivo +1, +2, ecc.
+    se il nome base esiste già.
+    """
+    # Controlla se esiste già un file con questo nome base
+    if base_name in existing_files_map:
+        # Trova il numero di suffisso più alto esistente
+        existing_versions = existing_files_map[base_name]
+        max_suffix = max([v['suffix'] for v in existing_versions])
+        
+        # Il nuovo file sarà il successivo
+        new_suffix = max_suffix + 1
+        new_base_name = f"{base_name}+{new_suffix}"
+        
+        # Aggiorna la mappa
+        existing_files_map[base_name].append({
+            'full_name': new_base_name + extension,
+            'base_name': new_base_name,
+            'suffix': new_suffix,
+            'extension': extension
+        })
+        
+        return new_base_name + extension
+    else:
+        # Nessun conflitto, usa il nome base normale
+        existing_files_map[base_name] = [{
+            'full_name': base_name + extension,
+            'base_name': base_name,
+            'suffix': 0,
+            'extension': extension
+        }]
+        return base_name + extension
+
+
+def downloadFiles(domain, files, output, resume):
+    # If needed, create directory
+    if not os.path.exists(output):
+        os.makedirs(output)
+
+    print("\n" + PC.ok_box + "Downloading Files...")
+
+    # Costruisci la mappa dei file esistenti nella directory di output
+    existing_files_map = get_existing_files_map(output)
+    total_existing = sum(len(v) for v in existing_files_map.values())
+    
+    if total_existing > 0:
+        print(PC.note_box + "Found {} existing files in the output directory.".format(total_existing))
+        
+        # Filtra i file da scaricare: se il nome base (senza suffisso) esiste già,
+        # verrà generato un nome univoco con suffisso progressivo
+        original_count = len(files)
+        # Non filtriamo più i file, ma lasceremo che generate_unique_filename gestisca i conflitti
+        print(PC.note_box + "Will handle filename conflicts with progressive numbering (+1, +2, etc.)")
+
+    # Checking if resume switch is on
+    if resume:
+        print("\n" + PC.ok_box + "Resume switch on, skipping the first {} file(s) from the remaining list".format(resume))
+        files = files[resume:]
+
+    if not files:
+        print(PC.note_box + "No new files to download.")
+        return
+
+    print(PC.note_box + "Downloading {} files...".format(len(files)))
+
+    # Downloading and saving files
+    for p, file in enumerate(files): 
+        outputDir = output + '/'
+        
+        # Genera nome file univoco con gestione conflitti
+        base_filename = file['name'][:250]  # Limita lunghezza base
+        unique_filename = generate_unique_filename(base_filename, file['extension'], existing_files_map)
+        filePath = os.path.join(outputDir, unique_filename)
+        
+        # Download with retry mechanism
+        max_retries = 3
+        downloaded = False
+        
+        # Verifica se il file esiste già fisicamente (controllo di sicurezza aggiuntivo)
+        if os.path.exists(filePath):
+            print(PC.note_box + "({}/{}) File already exists: {}".format(p+1, len(files), unique_filename))
+            downloaded = True  # Considera già scaricato
+            continue
+        
+        for attempt in range(max_retries):
+            try:
+                data = requests.get(file['wayback'], timeout=30)
+                
+                # Check if the request was successful (status code 200)
+                if data.status_code == 200:
+                    with open(filePath, 'wb') as f:
+                        f.write(data.content)
+                    
+                    # Mostra il nome file con suffisso se presente
+                    display_name = file['name']
+                    if '+' in unique_filename:
+                        # Estrai la parte dopo il + dal nome file
+                        suffix_part = re.search(r'\+([0-9]+)', unique_filename)
+                        if suffix_part:
+                            display_name = file['name'] + '+' + suffix_part.group(1)
+                    
+                    print(PC.note_box + "({}/{}) Saved {}{}".format(
+                        p+1, len(files), display_name, file['extension']))
+                    downloaded = True
+                    break
+                else:
+                    print(PC.warn_box + "Attempt {}/{}: HTTP {} for {}".format(
+                        attempt+1, max_retries, data.status_code, file['name']))
+                    
+            except (requests.exceptions.ConnectionError, 
+                    requests.exceptions.Timeout,
+                    requests.exceptions.RequestException) as e:
+                print(PC.warn_box + "Attempt {}/{}: Error downloading {}: {}".format(
+                    attempt+1, max_retries, file['name'], str(e)[:50]))
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
+                print(PC.note_box + "Waiting {} seconds before retry...".format(wait_time))
+                time.sleep(wait_time)
+        
+        if not downloaded:
+            print(PC.warn_box + "Failed to download {} after {} attempts. Moving to next file.".format(
+                file['name'], max_retries))
+
+        # Pause between downloads to avoid rate limiting
+        tDelay = 12
+        if p < len(files) - 1:  # Don't pause after the last file
+            print(f"{tDelay} secondi di pausa prima del prossimo download...")
+            time.sleep(tDelay)
+
+
+def main():
+    """Main Function"""
+    args = parse_arguments()
+
+    # Check for mutually exclusive options
+    if args.get_file_ext and args.get_all:
+        print(PC.warn_box + "Warning: --get-file-ext overrides --get-all")
+        args.get_all = False
+    
+    if args.get_file_ext:
+        print("\n" + PC.note_box + "Web Archive File Extension Analyzer")
+    else:
+        print("\n" + PC.note_box + "Web Archive File Downloader")
+    
+    print(PC.note_box + "Target domain : " + args.domain)
+    
+    if not args.get_file_ext:
+        if args.get_all:
+            print(PC.note_box + "Mode : Download ALL files")
+        else:
+            print(PC.note_box + "File types : " + args.filetypes)
+        if args.include_html:
+            print(PC.note_box + "Including HTML/PHP/ASP pages")
+        print(PC.note_box + "Output directory : {}/".format(args.output or args.domain))
+
+    # Determine output directory
+    if args.output:
+        outputDir = args.output
+    else:
+        outputDir = args.domain
+
+    # Getting the files list
+    all_files = getFileList(args.domain, args.http, args.filetypes, outputDir, args.get_all, args.include_html)
+
+    if args.get_file_ext:
+        # Just analyze and show extensions
+        analyze_file_extensions(all_files)
+    else:
+        # Parse file types for filtering
+        filetype_list = [ft.strip().lower() for ft in args.filetypes.split(',')]
+        
+        # Filter files based on criteria
+        selected_files = filter_files(all_files, args.filetypes, args.get_all, args.include_html)
+        
+        # Process files (add wayback URL and filename)
+        processed_files = process_files(selected_files, filetype_list, args.include_html)
+        
+        print(PC.note_box + "Files matching criteria: {}".format(len(processed_files)))
+        
+        # Download files
+        downloadFiles(args.domain, processed_files, outputDir, args.resume)
+
+    print("\n" + PC.ok_box + "Everything's done !")
+    print(PC.ok_box + "Happy analysis !\n")
+
+
+if __name__ == "__main__":
+    main()
