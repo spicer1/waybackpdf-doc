@@ -1,0 +1,64 @@
+# Python bytecode e cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Virtual environment
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables (sensitive data)
+.env
+.env.local
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+
+# Download directory (importante per il tuo script!)
+downloads/
+*.pdf
+*.doc
+*.docx
+*.odt
+*.html
+*.htm
+*.php
+*.asp
+*.aspx
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+*.whl
+
+# Temporary files
+*.tmp
+*.temp
+*~
