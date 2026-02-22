@@ -76,13 +76,16 @@ def get_extension_from_url(url):
     return 'no_extension'
 
 
-def format_timestamp_for_filename(timestamp, long_timestamp):
-    """Convert archive.org timestamp (YYYYMMDDHHMMSS) to YYYYMMDD format"""
-    if long_timestamp:
-        return timestamp
-    else
+def format_timestamp_for_filename(timestamp, use_short_timestamp):
+    """Convert archive.org timestamp (YYYYMMDDHHMMSS) to YYYYMMDD format if requested"""
+    if use_short_timestamp:
+        # Se richiesto formato breve, restituisci solo YYYYMMDD
         if len(timestamp) >= 8:
             return timestamp[:8]  # Returns YYYYMMDD
+        return timestamp
+    else:
+        # Altrimenti restituisci il timestamp completo
+        return timestamp
 
 
 def getFileList(domain, protocol, filetypes, outputDir, get_all=False, include_html=False):
@@ -256,7 +259,7 @@ def filter_files(files, filetypes, get_all=False, include_html=False):
     return selected_files
 
 
-def process_files(selected_files, filetype_list, include_html, long_timestamp):
+def process_files(selected_files, filetype_list, include_html, use_short_timestamp):
     """Add wayback URL and filename to selected files"""
     
     processed_files = []
@@ -322,7 +325,7 @@ def process_files(selected_files, filetype_list, include_html, long_timestamp):
         
         # Create filename with timestamp PREFIX (YYYYMMDDHHMMSS_filename) or (YYYYMMDD_filename)
         # Format timestamp to YYYYMMDDHHMMSS or YYYYMMDD
-        date_prefix = format_timestamp_for_filename(file['timestamp'],long_timestamp)
+        date_prefix = format_timestamp_for_filename(file['timestamp'], use_short_timestamp)
         file['name'] = date_prefix + '_' + base_name
         file['extension'] = extension
         
