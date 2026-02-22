@@ -175,7 +175,7 @@ python3 waybackpdf-doc.py -d old.unipi.it -t jpg,jpeg,png,gif -o ./iana_images
 python3 waybackpdf-doc.py -d old.unipi.it -t pdf
 ```
 
-# 🗒️: Important Notes
+# :bookmark: Important Notes
 
     The script automatically saves a filelist.raw.json file in the output directory with all metadata
 
